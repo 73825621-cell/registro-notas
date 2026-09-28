@@ -149,19 +149,34 @@ function setField(sid,curso,bim,field,val){
 }
 
 /* ---------- Login ---------- */
-function renderLogin(err){
+function renderLogin(err,mode,info){
+  mode=mode||'login';
+  const isReg=mode==='registro';
   document.getElementById('root').innerHTML=`
   <div class="login-wrap"><div class="login-card">
     <h2>Registro de Notas</h2>
     <div class="sub" style="font-family:'Segoe UI',Arial,sans-serif;color:#666;margin-bottom:16px">Colegio Los Ángeles de Jesús</div>
     <label>Correo</label><input id="loginEmail" type="email">
-    <label>Contraseña</label><input id="loginPass" type="password">
-    <button class="btn" id="loginBtn" style="width:100%">Ingresar</button>
+    <label>Contraseña${isReg?' (mínimo 6 caracteres)':''}</label><input id="loginPass" type="password">
+    ${isReg?'<label>Repite la contraseña</label><input id="loginPass2" type="password">':''}
+    <button class="btn" id="loginBtn" style="width:100%">${isReg?'Crear cuenta':'Ingresar'}</button>
     <div class="login-err">${err||''}</div>
+    ${info?`<div style="color:#2f6b4a;font-size:.85rem;margin-top:8px">${info}</div>`:''}
+    <div style="margin-top:14px;font-size:.85rem"><a href="#" id="toggleMode" style="color:#25405e">${isReg?'Ya tengo cuenta: ingresar':'¿No tienes cuenta? Crear cuenta'}</a></div>
   </div></div>`;
+  document.getElementById('toggleMode').onclick=e=>{e.preventDefault();renderLogin('',isReg?'login':'registro');};
   document.getElementById('loginBtn').onclick=async()=>{
     const email=document.getElementById('loginEmail').value.trim();
     const password=document.getElementById('loginPass').value;
+    if(isReg){
+      if(password.length<6){renderLogin('La contraseña debe tener al menos 6 caracteres.','registro');return;}
+      if(password!==document.getElementById('loginPass2').value){renderLogin('Las contraseñas no coinciden.','registro');return;}
+      const {data,error}=await sb.auth.signUp({email,password});
+      if(error){renderLogin(error.message,'registro');return;}
+      if(data.session){ session=data.session; await loadAllData(); tab='estudiantes'; render(); return; }
+      renderLogin('','login','Cuenta creada. Revisa tu correo y confirma el enlace; luego ingresa aquí.');
+      return;
+    }
     const {data,error}=await sb.auth.signInWithPassword({email,password});
     if(error){ renderLogin(error.message); return; }
     session=data.session;
