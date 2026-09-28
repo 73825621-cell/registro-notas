@@ -104,6 +104,14 @@ function promAlumnoGeneral(sid,bim){
   const vals=CURSOS.map(c=>promAlumnoCurso(sid,c,bim)).filter(v=>v!==null);
   return vals.length? Math.round((vals.reduce((a,b)=>a+b,0)/vals.length)*100)/100 : null;
 }
+const CAMPOS=['cN1','cN2','lN1','lN2','conN1','conN2','exM','exB'];
+function pctLleno(r){
+  if(!r)return 0;
+  const n=CAMPOS.filter(c=>r[c]!==null&&r[c]!==undefined&&r[c]!=='').length;
+  return Math.round(n/CAMPOS.length*100);
+}
+function pctColor(p){return p>=100?'var(--green)':(p===0?'var(--red)':'#b7791f');}
+function pctCell(sid,p){return `<td id="pct-${sid}" style="font-weight:600;color:${pctColor(p)}">${p}%</td>`;}
 function grados(){return[...new Set(DATA.students.map(s=>s.grado))].sort((a,b)=>a-b);}
 function studentsOf(g){return DATA.students.filter(s=>s.grado==g).sort((a,b)=>a.nombre.localeCompare(b.nombre));}
 
@@ -255,15 +263,18 @@ function viewRegistro(){
       <td>${fieldInput(s.id,curso,bim,'conN1',r.conN1)}</td><td>${fieldInput(s.id,curso,bim,'conN2',r.conN2)}</td>
       <td>${fieldInput(s.id,curso,bim,'exM',r.exM)}</td><td>${fieldInput(s.id,curso,bim,'exB',r.exB)}</td>
       <td class="${estadoClass(prom)}">${prom??'—'}</td>
+      ${pctCell(s.id,pctLleno(r))}
     </tr>`;
   }).join('');
+  const completos=list.filter(s=>pctLleno(getRec(s.id,curso,bim))===100).length;
   return `<h2>Registro de notas</h2><div class="sub">El Promedio se calcula solo (redondeado hacia arriba). Al guardar, se sube directo a la nube.</div>
   <div class="row">
     <div><label>Grado</label><select id="rGrado">${gs.map(x=>`<option value="${x}" ${x==g?'selected':''}>${x}°</option>`).join('')}</select></div>
     <div><label>Curso</label><select id="rCurso">${CURSOS.map(c=>`<option ${c==curso?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
     <div><label>Bimestre</label><select id="rBim">${BIMS.map(b=>`<option value="${b}" ${b==bim?'selected':''}>${BIM_LABEL[b]}</option>`).join('')}</select></div>
   </div>
-  ${list.length?`<div style="overflow-x:auto"><table><thead><tr><th>Alumno</th><th>Cuad. N1</th><th>Cuad. N2</th><th>Libro N1</th><th>Libro N2</th><th>Cond. N1</th><th>Cond. N2</th><th>Ex.Mensual</th><th>Ex.Bimestral</th><th>Promedio</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${list.length?`<div style="overflow-x:auto"><table><thead><tr><th>Alumno</th><th>Cuad. N1</th><th>Cuad. N2</th><th>Libro N1</th><th>Libro N2</th><th>Cond. N1</th><th>Cond. N2</th><th>Ex.Mensual</th><th>Ex.Bimestral</th><th>Promedio</th><th>% llenado</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="sub" id="resumenLleno" style="margin:10px 0 0">${completos} de ${list.length} alumnos con todas sus notas completas.</div>
   <div style="margin-top:14px"><button class="btn" id="saveGrades">Guardar notas</button></div>`
   :'<div class="empty">No hay alumnos en ese grado.</div>'}`;
 }
@@ -403,6 +414,20 @@ function wire(){
   [rGrado,rCurso,rBim].forEach(el=>{if(!el)return;el.onchange=()=>{
     window._rg=Number(rGrado.value); window._rc=rCurso.value; window._rb=Number(rBim.value); render();
   };});
+  m.querySelectorAll('.nota-in').forEach(inp=>inp.addEventListener('input',()=>{
+    const sid=inp.dataset.sid;
+    const fila=[...m.querySelectorAll('.nota-in')].filter(x=>x.dataset.sid===sid);
+    const llenos=fila.filter(x=>x.value!=='').length;
+    const p=Math.round(llenos/fila.length*100);
+    const c=document.getElementById('pct-'+sid);
+    if(c){c.textContent=p+'%';c.style.color=pctColor(p);}
+    const rs=document.getElementById('resumenLleno');
+    if(rs){
+      const sids=[...new Set([...m.querySelectorAll('.nota-in')].map(x=>x.dataset.sid))];
+      const ok=sids.filter(s=>[...m.querySelectorAll('.nota-in')].filter(x=>x.dataset.sid===s).every(x=>x.value!=='')).length;
+      rs.textContent=`${ok} de ${sids.length} alumnos con todas sus notas completas.`;
+    }
+  }));
   const sg=document.getElementById('saveGrades');
   if(sg)sg.onclick=async()=>{
     const g=window._rg||grados()[0], curso=window._rc||CURSOS[0], bim=window._rb||3;
