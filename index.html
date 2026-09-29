@@ -68,6 +68,17 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
 .login-card h2{font-family:Georgia,serif;color:var(--navy);margin-top:0}
 .login-card input{width:100%;margin-bottom:12px}
 .login-err{color:var(--red);font-size:.82rem;margin-top:8px;min-height:1em}
+.bar-track{position:relative}
+.bar-track .thr{position:absolute;left:65%;top:0;bottom:0;border-left:2px dashed #555;opacity:.6}
+.bar-row[data-gc]:hover,.bar-row[data-gg]:hover{background:#fbf3df}
+.heat{table-layout:fixed}.heat th{font-size:.7rem;text-align:center}.heat td{color:#fff;text-align:center;cursor:pointer;font-weight:600;border:2px solid #fff}.heat td:hover{filter:brightness(1.12)}
+.pill{display:inline-block;padding:2px 9px;border-radius:10px;font-size:.74rem;font-weight:600;background:#eee;color:#555}
+.pill.bad{background:#f6dcda;color:#B4443D}.pill.mid{background:#fbecc9;color:#8a6212}.pill.ok{background:#d7ebde;color:#2f6b4a}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.lg{font-family:'Segoe UI',Arial,sans-serif;font-size:.78rem;border:1px solid var(--line);background:#fff;border-radius:12px;padding:3px 10px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.lg i{width:10px;height:10px;border-radius:50%;display:inline-block}.lg.off{opacity:.4;text-decoration:line-through}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+circle[data-tip]{cursor:pointer}
 @page{size:A4 landscape;margin:0}
 @media print{ nav,.no-print{display:none!important} main{padding:12mm;max-width:none} .app{display:block} }
 @media (max-width:760px){
@@ -291,75 +302,143 @@ function viewRegistro(){
   :'<div class="empty">No hay alumnos en ese grado.</div>'}`;
 }
 
+/* ---------- ANÁLISIS PROFESIONAL ---------- */
+const PAL=['#1B2A41','#D9A441','#2f6b4a','#B4443D','#6b7fd7'];
+const COMPS=[['cu','Cuaderno'],['li','Libro'],['co','Conducta'],['exM','Ex. Mensual'],['exB','Ex. Bimestral']];
+const BK=[['0–5',0,6],['6–9',6,10],['10–12',10,13],['13–14',13,15],['15–16',15,17],['17–18',17,19],['19–20',19,21]];
+const AF=()=>window._af=window._af||{g:'all',b:3};
+const r2=x=>Math.round(x*100)/100, mean=a=>a.length?r2(a.reduce((x,y)=>x+y,0)/a.length):null;
+const bset=b=>b==='all'?BIMS:[b];
+const col=v=>v===null?'#bbb':v<13?'#B4443D':v<14?'#d0793f':v<15?'#D9A441':v<17?'#6b9a4a':'#2f6b4a';
+function pcs(sid,c,b){return mean(bset(b).map(x=>promAlumnoCurso(sid,c,x)).filter(v=>v!==null));}
+function pgen(sid,b){return mean(CURSOS.map(c=>pcs(sid,c,b)).filter(v=>v!==null));}
+function lst(){const g=AF().g;return g==='all'?DATA.students:studentsOf(g);}
+function vals(l,c,b){return l.map(s=>pcs(s.id,c,b)).filter(v=>v!==null);}
+function stat(a){const n=a.length;if(!n)return{n:0,avg:null,ap:null,min:null,max:null,sd:null,fail:0};const m=a.reduce((x,y)=>x+y,0)/n;return{n,avg:r2(m),ap:Math.round(a.filter(v=>v>=APROB).length/n*100),min:Math.min(...a),max:Math.max(...a),sd:r2(Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/n)),fail:a.filter(v=>v<APROB).length};}
+function comp(l,c,b,k){const o=[];l.forEach(s=>bset(b).forEach(x=>{const r=getRec(s.id,c,x);if(!r)return;const v=k==='cu'?avg2(r.cN1,r.cN2):k==='li'?avg2(r.lN1,r.lN2):k==='co'?avg2(r.conN1,r.conN2):k==='exM'?r.exM:r.exB;if(v!==null&&v!==undefined)o.push(v);}));return mean(o);}
+function weak(l,c,b){return COMPS.map(([k,n])=>({l:n,v:comp(l,c,b,k)})).filter(x=>x.v!==null).sort((p,q)=>p.v-q.v)[0];}
+const empty=t=>`<div class="empty">${t||'Aún no hay notas registradas para este filtro.'}</div>`;
+const kpi=a=>`<div class="stat">${a.map(([v,l,c])=>`<div><b style="${c?'color:'+c:''}">${v}</b><span>${l}</span></div>`).join('')}</div>`;
+
+function filtBar(o={}){const f=AF(),gs=grados();return `<div class="row no-print">${o.g===false?'':`<div><label>Grado</label><select id="afG"><option value="all" ${f.g==='all'?'selected':''}>Todo el colegio</option>${gs.map(g=>`<option value="${g}" ${f.g==g?'selected':''}>${g}°</option>`).join('')}</select></div>`}${o.b===false?'':`<div><label>Bimestre</label><select id="afB"><option value="all" ${f.b==='all'?'selected':''}>Todo el año</option>${BIMS.map(b=>`<option value="${b}" ${f.b===b?'selected':''}>${BIM_LABEL[b]} Bimestre</option>`).join('')}</select></div>`}${o.x||''}<button class="btn ghost" onclick="window.print()">Imprimir</button></div>`;}
+function bars(items){return items.map(i=>`<div class="bar-row" ${i.a||''} data-tip="${esc(i.t||'')}" style="${i.a?'cursor:pointer':''}"><div class="bar-label">${esc(i.l)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.max(0,(i.v||0)/20*100)}%;background:${col(i.v)}"></div><i class="thr"></i></div><b style="width:110px;font-size:.8rem">${i.v??'—'} <span style="font-weight:400;color:#777">${i.s||''}</span></b></div>`).join('')||empty('Sin datos');}
+function heat(b){return `<div style="overflow-x:auto"><table class="heat"><thead><tr><th></th>${CURSOS.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${grados().map(g=>`<tr><th>${g}°</th>${CURSOS.map(c=>{const st=stat(vals(studentsOf(g),c,b));return `<td data-gg="${g}" data-gc="${esc(c)}" data-tip="${g}° · ${esc(c)}: prom. ${st.avg??'—'} · ${st.ap??'—'}% aprobados · ${st.n} alumnos" style="background:${col(st.avg)}">${st.avg??'—'}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;}
+function hist(a){const c=BK.map(([l,lo,hi])=>({l,lo,n:a.filter(v=>v>=lo&&v<hi).length})),mx=Math.max(1,...c.map(x=>x.n));return `<div style="display:flex;align-items:flex-end;gap:8px;height:160px;padding-top:6px">${c.map(x=>`<div style="flex:1;text-align:center;font:12px 'Segoe UI',Arial" data-tip="${x.n} alumnos con promedio ${x.l}"><b>${x.n}</b><div style="height:${x.n/mx*100}px;background:${col(x.lo)};border-radius:3px 3px 0 0;min-height:2px"></div><div style="color:#666;margin-top:4px">${x.l}</div></div>`).join('')}</div>`;}
+function line(S,L){const hid=window._hide||{},W=640,Ht=260,l=36,r=14,t=12,bt=28;const all=S.filter(s=>!hid[s.n]).flatMap(s=>s.d).filter(v=>v!==null);const lo=Math.max(0,Math.floor(Math.min(...all,APROB)-1)),hi=20;const X=i=>l+(L.length>1?i*(W-l-r)/(L.length-1):(W-l-r)/2),Y=v=>t+(hi-v)/(hi-lo)*(Ht-t-bt);let g='';for(let v=lo;v<=hi;v+=2)g+=`<line x1="${l}" x2="${W-r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eee"/><text x="${l-6}" y="${Y(v)+4}" font-size="10" text-anchor="end" fill="#888">${v}</text>`;g+=`<line x1="${l}" x2="${W-r}" y1="${Y(APROB)}" y2="${Y(APROB)}" stroke="#B4443D" stroke-dasharray="4 4"/><text x="${W-r}" y="${Y(APROB)-4}" font-size="10" text-anchor="end" fill="#B4443D">Aprobatoria ${APROB}</text>`;L.forEach((x,i)=>g+=`<text x="${X(i)}" y="${Ht-8}" font-size="11" text-anchor="middle" fill="#666">${x}</text>`);S.forEach(s=>{if(hid[s.n])return;let d='',pen=false;s.d.forEach((v,i)=>{if(v===null){pen=false;return;}d+=(pen?'L':'M')+X(i)+' '+Y(v);pen=true;});g+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="${s.w||2}"/>`;s.d.forEach((v,i)=>{if(v!==null)g+=`<circle cx="${X(i)}" cy="${Y(v)}" r="5" fill="${s.c}" stroke="#fff" data-tip="${esc(s.n)} · ${L[i]}: ${v}"/>`;});});return `<div class="legend">${S.map(s=>`<button class="lg ${hid[s.n]?'off':''}" data-lg="${esc(s.n)}"><i style="background:${s.c}"></i>${esc(s.n)}</button>`).join('')}</div><svg viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto">${g}</svg>`;}
+
 function viewAnalisis(){
-  const gs=grados();
-  const modo=window._am||'alumno';
-  let body='';
-  if(modo==='alumno'){
-    const all=[...DATA.students].sort((a,b)=>a.grado-b.grado||a.nombre.localeCompare(b.nombre));
-    const sid=window._aSid||(all[0]&&all[0].id);
-    const bim=window._aBim||3;
-    body=`<div class="row">
-      <div><label>Alumno</label><select id="aSid">${all.map(s=>`<option value="${s.id}" ${s.id==sid?'selected':''}>${esc(s.nombre)} (${s.grado}°)</option>`).join('')}</select></div>
-      <div><label>Bimestre</label><select id="aBim">${BIMS.map(b=>`<option value="${b}" ${b==bim?'selected':''}>${BIM_LABEL[b]}</option>`).join('')}</select></div>
-    </div>`;
-    if(sid){
-      const rowsC=CURSOS.map(c=>{
-        const prom=promAlumnoCurso(sid,c,bim);
-        return `<tr><td>${esc(c)}</td><td class="${estadoClass(prom)}">${prom??'—'}</td></tr>`;
-      }).join('');
-      const gen=promAlumnoGeneral(sid,bim);
-      body+=`<table><thead><tr><th>Curso</th><th>Promedio ${BIM_LABEL[bim]} Bim.</th></tr></thead><tbody>${rowsC}</tbody></table>
-      <div class="stat"><div><b class="${estadoClass(gen)}">${gen??'—'}</b><span>Promedio general</span></div></div>`;
-    }
-  }
-  if(modo==='curso'){
-    const curso=window._aCurso||CURSOS[0], g=window._aGrado||'', bim=window._acBim||3;
-    body=`<div class="row">
-      <div><label>Curso</label><select id="aCurso">${CURSOS.map(c=>`<option ${c==curso?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
-      <div><label>Grado (opcional)</label><select id="aGrado"><option value="">Todos</option>${gs.map(x=>`<option value="${x}" ${x==g?'selected':''}>${x}°</option>`).join('')}</select></div>
-      <div><label>Bimestre</label><select id="acBim">${BIMS.map(b=>`<option value="${b}" ${b==bim?'selected':''}>${BIM_LABEL[b]}</option>`).join('')}</select></div>
-    </div>`;
-    const list=g?studentsOf(g):[...DATA.students];
-    const proms=list.map(s=>({s,p:promAlumnoCurso(s.id,curso,bim)})).filter(x=>x.p!==null);
-    const aprobados=proms.filter(x=>x.p>=APROB).length;
-    const clase=proms.length?Math.round((proms.reduce((a,x)=>a+x.p,0)/proms.length)*100)/100:null;
-    const rows=proms.sort((a,b)=>b.p-a.p).map(x=>`<tr><td>${esc(x.s.nombre)}</td><td>${x.s.grado}°</td><td class="${estadoClass(x.p)}">${x.p}</td></tr>`).join('');
-    body+=`<div class="stat">
-      <div><b>${clase??'—'}</b><span>Promedio del curso</span></div>
-      <div><b>${aprobados}/${proms.length}</b><span>Aprobados</span></div>
-    </div>
-    ${proms.length?`<table><thead><tr><th>Alumno</th><th>Grado</th><th>Promedio</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty">Sin notas registradas para este curso y bimestre.</div>'}`;
-  }
-  if(modo==='grado'){
-    const g=window._agGrado||gs[0], bim=window._agBim||3;
-    body=`<div class="row">
-      <div><label>Grado</label><select id="agGrado">${gs.map(x=>`<option value="${x}" ${x==g?'selected':''}>${x}°</option>`).join('')}</select></div>
-      <div><label>Bimestre</label><select id="agBimS">${BIMS.map(b=>`<option value="${b}" ${b==bim?'selected':''}>${BIM_LABEL[b]}</option>`).join('')}</select></div>
-    </div>`;
-    const list=studentsOf(g);
-    const bars=CURSOS.map(c=>{
-      const proms=list.map(s=>promAlumnoCurso(s.id,c,bim)).filter(v=>v!==null);
-      const prom=proms.length?Math.round((proms.reduce((a,b)=>a+b,0)/proms.length)*100)/100:0;
-      return `<div class="bar-row"><div class="bar-label">${esc(c)}</div><div class="bar-track"><div class="bar-fill" style="width:${prom/20*100}%"></div></div><div>${prom||'—'}</div></div>`;
-    }).join('');
-    const gens=list.map(s=>promAlumnoGeneral(s.id,bim)).filter(v=>v!==null);
-    const genGrado=gens.length?Math.round((gens.reduce((a,b)=>a+b,0)/gens.length)*100)/100:null;
-    const enRiesgo=list.filter(s=>{const gp=promAlumnoGeneral(s.id,bim);return gp!==null&&gp<APROB;}).length;
-    body+=`<div class="stat">
-      <div><b class="${estadoClass(genGrado)}">${genGrado??'—'}</b><span>Promedio general del grado</span></div>
-      <div><b>${list.length}</b><span>Alumnos</span></div>
-      <div><b class="${enRiesgo?'desaprob':''}">${enRiesgo}</b><span>En riesgo (prom. &lt; ${APROB})</span></div>
-    </div>
-    <div class="card"><b style="font-family:Georgia,serif">Promedio por curso — ${g}°</b><div style="margin-top:12px">${bars}</div></div>`;
-  }
-  return `<h2>Análisis</h2><div class="sub">Explora el desempeño por alumno, por curso o por grado.</div>
-  <div class="tabbar">
-    <button data-am="alumno" class="${modo==='alumno'?'active':''}">Por alumno</button>
-    <button data-am="curso" class="${modo==='curso'?'active':''}">Por curso</button>
-    <button data-am="grado" class="${modo==='grado'?'active':''}">Por grado</button>
-  </div>${body}`;
+  const T=[['resumen','Resumen'],['cursos','Cursos'],['grados','Grados'],['alumnos','Alumno'],['riesgo','Riesgo y mérito'],['tend','Tendencias']];
+  const m=T.some(x=>x[0]===window._am)?window._am:'resumen';
+  const body={resumen:aResumen,cursos:aCursos,grados:aGrados,alumnos:aAlumno,riesgo:aRiesgo,tend:aTend}[m]();
+  return `<h2>Análisis</h2><div class="sub">Panel interactivo: filtra, pasa el mouse sobre los gráficos y haz clic en cursos, celdas o alumnos para ver el detalle. La línea punteada marca la nota aprobatoria (${APROB}).</div>
+  <div class="tabbar no-print">${T.map(x=>`<button data-am="${x[0]}" class="${m===x[0]?'active':''}">${x[1]}</button>`).join('')}</div>${body}`;
 }
+
+function aResumen(){
+  const l=lst(),b=AF().b,f=filtBar();
+  const cs=CURSOS.map(c=>({c,...stat(vals(l,c,b))})).filter(x=>x.n);
+  const gens=l.map(s=>pgen(s.id,b)).filter(v=>v!==null);
+  if(!gens.length)return f+empty();
+  const ries=gens.filter(v=>v<APROB).length,apG=Math.round((gens.length-ries)/gens.length*100);
+  const avance=Math.round(mean(l.flatMap(s=>CURSOS.flatMap(c=>bset(b).map(x=>pctLleno(getRec(s.id,c,x)))))));
+  const so=[...cs].sort((x,y)=>x.avg-y.avg),lo=so[0],hi=so[so.length-1];
+  const lowAp=[...cs].sort((x,y)=>x.ap-y.ap)[0],disp=[...cs].sort((x,y)=>y.sd-x.sd)[0],wk=weak(l,lo.c,b);
+  let cell=null;grados().forEach(g=>{if(AF().g!=='all'&&AF().g!=g)return;CURSOS.forEach(c=>{const st=stat(vals(studentsOf(g),c,b));if(st.n&&(!cell||st.avg<cell.avg))cell={g,c,avg:st.avg};});});
+  const ins=[`El curso con <b>menor promedio</b> es <b>${lo.c}</b> (${lo.avg}) y el de <b>mayor promedio</b> es <b>${hi.c}</b> (${hi.avg}).`,
+   lowAp.ap<100?`<b>${lowAp.c}</b> tiene la aprobación más baja: solo <b>${lowAp.ap}%</b> de los alumnos aprueba.`:'Todos los cursos tienen 100% de aprobación.',
+   wk?`En ${lo.c}, el componente más débil es <b>${wk.l}</b> (prom. ${wk.v}): buen punto de partida para reforzar.`:'',
+   cell?`El punto más crítico es <b>${cell.g}° en ${cell.c}</b>, con promedio ${cell.avg}.`:'',
+   `<b>${ries}</b> de ${gens.length} alumnos (${100-apG}%) tienen promedio general menor a ${APROB}.`,
+   disp&&disp.sd>=2.5?`<b>${disp.c}</b> tiene el rendimiento más desigual (desv. ${disp.sd}): conviven alumnos muy altos y muy bajos.`:''].filter(Boolean);
+  return f+kpi([[mean(gens),'Promedio general',col(mean(gens))],[l.length,'Alumnos'],[apG+'%','Aprobación general',col(apG>=80?16:apG>=60?14:12)],[ries,'Alumnos en riesgo',ries?CLRB:''],[avance+'%','Avance del registro']])+
+  `<div class="card" style="border-left:4px solid var(--amber)"><b style="font-family:Georgia,serif">Hallazgos clave</b><ul style="margin:8px 0 0;padding-left:20px;line-height:1.7;font-family:'Segoe UI',Arial;font-size:.88rem">${ins.map(i=>`<li>${i}</li>`).join('')}</ul></div>
+  <div class="card"><b style="font-family:Georgia,serif">Promedio por curso</b> <span class="sub">(clic en un curso para ver su detalle)</span><div style="margin-top:10px">${bars(CURSOS.map(c=>{const st=stat(vals(l,c,b));return{l:c,v:st.avg,s:st.n?st.ap+'% aprob.':'',t:`${c}: ${st.n} alumnos, ${st.fail} desaprobados`,a:`data-gc="${esc(c)}"`};}))}</div></div>
+  <div class="card"><b style="font-family:Georgia,serif">Mapa de calor: grado × curso</b> <span class="sub">(rojo = desaprobado, verde = alto rendimiento)</span><div style="margin-top:10px">${heat(b)}</div></div>`;
+}
+const CLRB='#B4443D';
+
+function aCursos(){
+  const l=lst(),b=AF().b,c=CURSOS.includes(window._ac)?window._ac:CURSOS[0];
+  const f=filtBar({x:`<div><label>Curso</label><select id="acSel">${CURSOS.map(x=>`<option ${x===c?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`});
+  const pri=st=>!st.n?['Sin datos','']:(st.avg<APROB||st.ap<60)?['Alta','bad']:(st.ap<80||st.avg<15)?['Media','mid']:['Baja','ok'];
+  const rows=CURSOS.map(x=>({x,st:stat(vals(l,x,b)),w:weak(l,x,b)}));
+  const tbl=`<div style="overflow-x:auto"><table><thead><tr><th>Curso</th><th>Prom.</th><th>% aprob.</th><th>Desaprob.</th><th>Mín–Máx</th><th>Desv.</th><th>Componente débil</th><th>Prioridad de mejora</th></tr></thead><tbody>${rows.map(({x,st,w})=>{const p=pri(st);return `<tr data-gc="${esc(x)}" style="cursor:pointer;${x===c?'background:#fbf3df':''}"><td><b>${esc(x)}</b></td><td>${st.avg??'—'}</td><td>${st.ap??'—'}${st.n?'%':''}</td><td>${st.n?st.fail:'—'}</td><td>${st.min??'—'}–${st.max??'—'}</td><td>${st.sd??'—'}</td><td>${w?w.l+' ('+w.v+')':'—'}</td><td><span class="pill ${p[1]}">${p[0]}</span></td></tr>`}).join('')}</tbody></table></div>`;
+  const a=vals(l,c,b),st=stat(a);
+  if(!st.n)return f+`<div class="card"><b style="font-family:Georgia,serif">Comparativo de cursos</b>${tbl}</div>`+empty();
+  const rk=l.map(s=>({s,v:pcs(s.id,c,b)})).filter(x=>x.v!==null).sort((p,q)=>q.v-p.v);
+  const li=arr=>arr.map(x=>`<tr data-gs="${x.s.id}" style="cursor:pointer"><td>${esc(x.s.nombre)}</td><td>${x.s.grado}°</td><td class="${estadoClass(x.v)}">${x.v}</td></tr>`).join('');
+  const gs=AF().g==='all'?grados():[AF().g];
+  return f+`<div class="card"><b style="font-family:Georgia,serif">Comparativo de cursos</b> <span class="sub">(prioridad: Alta si prom. &lt; ${APROB} o aprobación &lt; 60%)</span>${tbl}</div>
+  <h3>Detalle de ${esc(c)}</h3>${kpi([[st.avg,'Promedio',col(st.avg)],[st.ap+'%','Aprobación'],[st.fail,'Desaprobados',st.fail?CLRB:''],[st.max,'Nota más alta'],[st.min,'Nota más baja']])}
+  <div class="card"><b style="font-family:Georgia,serif">Distribución de notas</b>${hist(a)}</div>
+  <div class="card"><b style="font-family:Georgia,serif">¿Qué componente jala hacia abajo?</b><div style="margin-top:10px">${bars(COMPS.map(([k,n])=>({l:n,v:comp(l,c,b,k),t:n+' en '+c})))}</div></div>
+  <div class="card"><b style="font-family:Georgia,serif">Promedio por grado en ${esc(c)}</b><div style="margin-top:10px">${bars(gs.map(g=>{const s2=stat(vals(studentsOf(g),c,b));return{l:g+'° de Secundaria',v:s2.avg,s:s2.n?s2.ap+'% aprob.':''};}))}</div></div>
+  <div class="grid2"><div class="card"><b style="font-family:Georgia,serif">🏆 Mejores 5</b><table><tbody>${li(rk.slice(0,5))}</tbody></table></div>
+  <div class="card"><b style="font-family:Georgia,serif">⚠ Necesitan apoyo (5 más bajos)</b><table><tbody>${li(rk.slice(-5).reverse())}</tbody></table></div></div>`;
+}
+
+function aGrados(){
+  const b=AF().b,f=filtBar({g:false});
+  const rows=grados().map(g=>{const l=studentsOf(g),gens=l.map(s=>pgen(s.id,b)).filter(v=>v!==null),cs=CURSOS.map(c=>({c,...stat(vals(l,c,b))})).filter(x=>x.n).sort((p,q)=>p.avg-q.avg),rs=gens.filter(v=>v<APROB).length;return{g,n:l.length,avg:mean(gens),ap:gens.length?Math.round((gens.length-rs)/gens.length*100):null,rs,lo:cs[0],hi:cs[cs.length-1]};});
+  if(!rows.some(x=>x.avg!==null))return f+empty();
+  return f+`<div class="card"><b style="font-family:Georgia,serif">Promedio general por grado</b> <span class="sub">(clic para ver el resumen del grado)</span><div style="margin-top:10px">${bars(rows.map(x=>({l:x.g+'° de Secundaria',v:x.avg,s:x.ap!==null?x.ap+'% aprob.':'',t:`${x.n} alumnos · ${x.rs} en riesgo`,a:`data-gg="${x.g}"`})))}</div></div>
+  <div class="card"><b style="font-family:Georgia,serif">Comparativo por grado</b><div style="overflow-x:auto"><table><thead><tr><th>Grado</th><th>Alumnos</th><th>Prom.</th><th>Aprobados / desaprobados</th><th>En riesgo</th><th>Mejor curso</th><th>Curso a reforzar</th></tr></thead><tbody>${rows.map(x=>`<tr data-gg="${x.g}" style="cursor:pointer"><td><b>${x.g}°</b></td><td>${x.n}</td><td class="${estadoClass(x.avg)}">${x.avg??'—'}</td><td><div style="display:flex;height:12px;min-width:120px;border-radius:3px;overflow:hidden;background:#eee" data-tip="${x.ap??0}% aprobados"><i style="width:${x.ap??0}%;background:#2f6b4a"></i><i style="flex:1;background:${x.ap===null?'#eee':'#B4443D'}"></i></div></td><td>${x.rs}</td><td>${x.hi?esc(x.hi.c)+' ('+x.hi.avg+')':'—'}</td><td>${x.lo?esc(x.lo.c)+' ('+x.lo.avg+')':'—'}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="card"><b style="font-family:Georgia,serif">Mapa de calor: grado × curso</b><div style="margin-top:10px">${heat(b)}</div></div>`;
+}
+
+function aAlumno(){
+  const all=[...DATA.students].sort((a,b)=>a.grado-b.grado||a.nombre.localeCompare(b.nombre));
+  if(!all.length)return empty('Sin alumnos.');
+  const s=all.find(x=>x.id===window._as)||all[0],b=AF().b,peers=studentsOf(s.grado);
+  const sel=`<div><label>Alumno</label><select id="asSel">${grados().map(g=>`<optgroup label="${g}° de Secundaria">${all.filter(x=>x.grado===g).map(x=>`<option value="${x.id}" ${x.id===s.id?'selected':''}>${esc(x.nombre)}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
+  const f=filtBar({g:false,x:sel}),gen=pgen(s.id,b);
+  if(gen===null)return f+empty('Este alumno aún no tiene notas para el bimestre elegido.');
+  const rank=peers.map(p=>pgen(p.id,b)).filter(v=>v!==null).sort((x,y)=>y-x),pos=rank.indexOf(gen)+1;
+  const cs=CURSOS.map(c=>({c,v:pcs(s.id,c,b)})).filter(x=>x.v!==null).sort((x,y)=>x.v-y.v),bad=cs.filter(x=>x.v<APROB).length;
+  const S=CURSOS.map((c,i)=>({n:c,c:PAL[i],d:BIMS.map(x=>promAlumnoCurso(s.id,c,x))}));S.push({n:'General',c:'#000',w:3.5,d:BIMS.map(x=>promAlumnoGeneral(s.id,x))});
+  return f+kpi([[gen,'Promedio general',col(gen)],['#'+pos+' de '+rank.length,'Puesto en '+s.grado+'°'],[bad,'Cursos desaprobados',bad?CLRB:''],[mean(rank),'Promedio del grado']])+
+  `<div class="card"><b style="font-family:Georgia,serif">Fortaleza y debilidad</b><div class="sub" style="margin:6px 0 0">Mayor fortaleza: <b>${esc(cs[cs.length-1].c)}</b> (${cs[cs.length-1].v}) · Curso a reforzar: <b>${esc(cs[0].c)}</b> (${cs[0].v})</div></div>
+  <div class="card"><b style="font-family:Georgia,serif">Notas por curso vs. promedio del grado</b><div style="margin-top:10px">${bars(CURSOS.map(c=>({l:c,v:pcs(s.id,c,b),s:'grado: '+(mean(vals(peers,c,b))??'—'),t:c})))}</div></div>
+  <div class="card"><b style="font-family:Georgia,serif">Evolución por bimestre</b> <span class="sub">(clic en la leyenda para ocultar líneas)</span>${line(S,BIMS.map(x=>BIM_LABEL[x]))}</div>`;
+}
+
+function aRiesgo(){
+  const l=lst(),b=AF().b,f=filtBar();
+  const rows=l.map(s=>({s,gen:pgen(s.id,b),bad:CURSOS.map(c=>({c,v:pcs(s.id,c,b)})).filter(x=>x.v!==null&&x.v<APROB)})).filter(x=>x.gen!==null);
+  if(!rows.length)return f+empty();
+  const lv=x=>x.bad.length>=3||x.gen<APROB?['Alto','bad']:x.bad.length===2?['Medio','mid']:['Leve','mid'];
+  const risk=rows.filter(x=>x.bad.length||x.gen<APROB).sort((p,q)=>q.bad.length-p.bad.length||p.gen-q.gen);
+  const honor=[...rows].sort((p,q)=>q.gen-p.gen).slice(0,10);
+  return f+kpi([[risk.length,'Alumnos con alerta',risk.length?CLRB:''],[risk.filter(x=>lv(x)[0]==='Alto').length,'Riesgo alto',CLRB],[Math.round(risk.length/rows.length*100)+'%','Del total evaluado']])+
+  `<div class="card"><b style="font-family:Georgia,serif">Alumnos que necesitan apoyo</b> <span class="sub">(Alto: 3+ cursos desaprobados o promedio general &lt; ${APROB}; clic para ver su perfil)</span>${risk.length?`<div style="overflow-x:auto"><table><thead><tr><th>Alumno</th><th>Grado</th><th>Prom. gen.</th><th>Cursos desaprobados</th><th>Riesgo</th></tr></thead><tbody>${risk.map(x=>`<tr data-gs="${x.s.id}" style="cursor:pointer"><td>${esc(x.s.nombre)}</td><td>${x.s.grado}°</td><td class="${estadoClass(x.gen)}">${x.gen}</td><td>${x.bad.map(y=>`<span class="pill bad" style="margin-right:4px">${esc(y.c)} ${y.v}</span>`).join('')}</td><td><span class="pill ${lv(x)[1]}">${lv(x)[0]}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Ningún alumno con alerta 🎉')}</div>
+  <div class="card"><b style="font-family:Georgia,serif">🏆 Cuadro de mérito (top 10)</b><table><thead><tr><th>#</th><th>Alumno</th><th>Grado</th><th>Prom. gen.</th></tr></thead><tbody>${honor.map((x,i)=>`<tr data-gs="${x.s.id}" style="cursor:pointer"><td>${i+1}</td><td>${esc(x.s.nombre)}</td><td>${x.s.grado}°</td><td class="aprob">${x.gen}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function aTend(){
+  const l=lst(),f=filtBar({b:false});
+  const S=CURSOS.map((c,i)=>({n:c,c:PAL[i],d:BIMS.map(x=>mean(vals(l,c,x)))}));
+  S.push({n:'General',c:'#000',w:3.5,d:BIMS.map(x=>mean(l.map(s=>pgen(s.id,x)).filter(v=>v!==null)))});
+  if(!S.some(s=>s.d.some(v=>v!==null)))return f+empty();
+  return f+`<div class="card"><b style="font-family:Georgia,serif">Evolución del promedio por bimestre</b> <span class="sub">(clic en la leyenda para ocultar líneas)</span>${line(S,BIMS.map(x=>BIM_LABEL[x]))}</div>
+  <div class="card"><b style="font-family:Georgia,serif">Variación entre bimestres</b><div style="overflow-x:auto"><table><thead><tr><th>Curso</th>${BIMS.map(x=>`<th>${BIM_LABEL[x]}</th>`).join('')}<th>Variación</th></tr></thead><tbody>${S.map(s=>{const nn=s.d.filter(v=>v!==null),d=nn.length>1?r2(nn[nn.length-1]-nn[0]):null;return `<tr><td><b>${esc(s.n)}</b></td>${s.d.map(v=>`<td>${v??'—'}</td>`).join('')}<td class="${d>0?'aprob':d<0?'desaprob':''}">${d===null?'—':(d>0?'▲ +':d<0?'▼ ':'= ')+d}</td></tr>`}).join('')}</tbody></table></div></div>`;
+}
+
+function wireAn(){
+  const m=document.getElementById('main');if(!m)return;
+  const on=(id,fn)=>{const e=document.getElementById(id);if(e)e.onchange=()=>{fn(e.value);render();};};
+  on('afG',v=>AF().g=v==='all'?'all':Number(v));
+  on('afB',v=>AF().b=v==='all'?'all':Number(v));
+  on('acSel',v=>window._ac=v);on('asSel',v=>window._as=v);
+  m.querySelectorAll('[data-lg]').forEach(x=>x.onclick=()=>{const h=window._hide=window._hide||{};h[x.dataset.lg]=!h[x.dataset.lg];render();});
+  m.querySelectorAll('[data-gc],[data-gs],[data-gg]').forEach(el=>el.onclick=()=>{
+    if(el.dataset.gg)AF().g=Number(el.dataset.gg);
+    if(el.dataset.gc){window._ac=el.dataset.gc;window._am='cursos';}
+    else if(el.dataset.gs){window._as=el.dataset.gs;window._am='alumnos';}
+    else window._am='resumen';
+    render();window.scrollTo(0,0);});
+}
+(function(){const t=document.createElement('div');t.style.cssText="position:fixed;z-index:9998;background:#1B2A41;color:#fff;padding:6px 10px;border-radius:4px;font:12px 'Segoe UI',Arial;pointer-events:none;display:none;max-width:260px";document.body.appendChild(t);
+document.addEventListener('mousemove',e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(!el||!el.dataset.tip){t.style.display='none';return;}t.textContent=el.dataset.tip;t.style.display='block';t.style.left=Math.min(e.clientX+14,innerWidth-270)+'px';t.style.top=(e.clientY+14)+'px';});})();
 
 function viewReportes(){
   const gs=grados();
@@ -493,6 +572,7 @@ function wire(){
   const pb2=document.getElementById('printBtn2');if(pb2)pb2.onclick=()=>window.print();
   const fB=document.getElementById('repFullB');if(fB)fB.onchange=()=>{window._repFB=Number(fB.value);};
   const fBtn=document.getElementById('fullPdfBtn');if(fBtn)fBtn.onclick=()=>descargarReporteCompleto(Number(document.getElementById('repFullB').value));
+  wireAn();
   const exBtn=document.getElementById('exportXlsx');if(exBtn)exBtn.onclick=exportExcel;
   const imIn=document.getElementById('importXlsx'), upBtn=document.getElementById('updateDbBtn');
   if(imIn&&upBtn){
