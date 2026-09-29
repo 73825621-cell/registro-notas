@@ -37,7 +37,15 @@ table{width:100%;border-collapse:collapse;background:#fff;font-family:'Segoe UI'
 th,td{padding:8px 9px;border-bottom:1px solid var(--paper-2);text-align:left}
 th{background:var(--paper-2);font-weight:600;font-size:.74rem;color:#444}
 tr:hover td{background:#fbfaf6}
-.nota-in{width:56px}
+.nota-in{width:56px;text-align:center}
+.nota-in:focus{outline:2px solid var(--amber);outline-offset:-1px;background:#fffbee}
+.overlay{position:fixed;inset:0;background:rgba(27,42,65,.65);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:'Segoe UI',Arial,sans-serif}
+.overlay .box{background:#fff;border-radius:8px;padding:28px 36px;text-align:center;min-width:280px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.spinner{width:42px;height:42px;border:4px solid var(--paper-2);border-top-color:var(--navy);border-radius:50%;margin:0 auto 14px;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.progress{height:8px;background:var(--paper-2);border-radius:4px;overflow:hidden;margin-top:12px}
+.progress i{display:block;height:100%;width:0;background:var(--amber);transition:width .2s}
+button.btn:disabled{opacity:.5;cursor:not-allowed}
 .aprob{color:var(--green);font-weight:600}
 .desaprob{color:var(--red);font-weight:600}
 .card{background:#fff;border:1px solid var(--line);border-radius:6px;padding:18px 20px;margin-bottom:16px}
@@ -242,6 +250,7 @@ function viewEstudiantes(){
     <div class="row" style="margin-bottom:0">
       <button class="btn ghost" id="exportXlsx">Exportar a Excel</button>
       <div><label>Importar Excel (hoja "Notas")</label><input type="file" id="importXlsx" accept=".xlsx,.xls"></div>
+      <button class="btn" id="updateDbBtn" disabled>Actualizar base de datos</button>
     </div>
     <div id="importMsg" class="sub" style="margin:8px 0 0">${window._importMsg||''}</div>
   </div>
@@ -249,7 +258,7 @@ function viewEstudiantes(){
 }
 
 function fieldInput(sid,curso,bim,field,val){
-  return `<input type="number" min="0" max="20" class="nota-in" data-sid="${sid}" data-field="${field}" value="${val??''}">`;
+  return `<input type="text" inputmode="decimal" autocomplete="off" class="nota-in" data-sid="${sid}" data-field="${field}" value="${val??''}">`;
 }
 
 function viewRegistro(){
@@ -424,7 +433,27 @@ function wire(){
   [rGrado,rCurso,rBim].forEach(el=>{if(!el)return;el.onchange=()=>{
     window._rg=Number(rGrado.value); window._rc=rCurso.value; window._rb=Number(rBim.value); render();
   };});
+  /* Navegación con flechas entre celdas */
+  const notaRows=[...m.querySelectorAll('tbody tr')].map(tr=>[...tr.querySelectorAll('.nota-in')]).filter(r=>r.length);
+  notaRows.forEach((fila,ri)=>fila.forEach((inp,ci)=>{
+    inp.addEventListener('focus',()=>setTimeout(()=>inp.select(),0));
+    inp.addEventListener('keydown',e=>{
+      let nr=ri,nc=ci;
+      if(e.key==='ArrowUp')nr--;
+      else if(e.key==='ArrowDown'||e.key==='Enter')nr++;
+      else if(e.key==='ArrowLeft')nc--;
+      else if(e.key==='ArrowRight')nc++;
+      else return;
+      e.preventDefault();
+      const t=notaRows[nr]&&notaRows[nr][nc];
+      if(t){t.focus();}
+    });
+  }));
   m.querySelectorAll('.nota-in').forEach(inp=>inp.addEventListener('input',()=>{
+    let v=inp.value.replace(',','.').replace(/[^0-9.]/g,'');
+    const dot=v.indexOf('.'); if(dot>=0)v=v.slice(0,dot+1)+v.slice(dot+1).replace(/\./g,'');
+    if(v!==''&&Number(v)>20)v='20';
+    if(v!==inp.value)inp.value=v;
     const sid=inp.dataset.sid;
     const fila=[...m.querySelectorAll('.nota-in')].filter(x=>x.dataset.sid===sid);
     const llenos=fila.filter(x=>x.value!=='').length;
@@ -465,7 +494,16 @@ function wire(){
   const fB=document.getElementById('repFullB');if(fB)fB.onchange=()=>{window._repFB=Number(fB.value);};
   const fBtn=document.getElementById('fullPdfBtn');if(fBtn)fBtn.onclick=()=>descargarReporteCompleto(Number(document.getElementById('repFullB').value));
   const exBtn=document.getElementById('exportXlsx');if(exBtn)exBtn.onclick=exportExcel;
-  const imIn=document.getElementById('importXlsx');if(imIn)imIn.onchange=e=>importExcel(e.target.files[0]);
+  const imIn=document.getElementById('importXlsx'), upBtn=document.getElementById('updateDbBtn');
+  if(imIn&&upBtn){
+    imIn.onchange=()=>{
+      window._importFile=imIn.files[0]||null;
+      upBtn.disabled=!window._importFile;
+      const im=document.getElementById('importMsg');
+      if(im)im.textContent=window._importFile?`Archivo seleccionado: ${window._importFile.name}. Presiona "Actualizar base de datos" para subirlo.`:'';
+    };
+    upBtn.onclick=()=>importExcel(window._importFile);
+  }
 }
 
 function exportExcel(){
@@ -497,35 +535,71 @@ async function findOrCreateStudentRemote(nombre,grado){
   if(!s){ const id=await insertStudent(String(nombre).trim(),grado); s=DATA.students.find(x=>x.id===id); }
   return s;
 }
+function showLoading(msg){
+  let o=document.getElementById('loadingOverlay');
+  if(!o){o=document.createElement('div');o.id='loadingOverlay';o.className='overlay';
+    o.innerHTML='<div class="box"><div class="spinner"></div><div id="loadingMsg" style="font-weight:600;color:#1B2A41"></div><div id="loadingSub" style="font-size:.82rem;color:#777;margin-top:6px"></div><div class="progress"><i id="loadingBar"></i></div></div>';
+    document.body.appendChild(o);}
+  document.getElementById('loadingMsg').textContent=msg;
+}
+function setLoading(sub,pct){
+  const a=document.getElementById('loadingSub'),b=document.getElementById('loadingBar');
+  if(a)a.textContent=sub||''; if(b&&pct!==undefined)b.style.width=pct+'%';
+}
+function hideLoading(){const o=document.getElementById('loadingOverlay');if(o)o.remove();}
+
 async function importExcel(file){
   if(!file)return;
+  showLoading('Actualizando base de datos...');
+  setLoading('Leyendo el archivo...',3);
   try{
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
     const sheetName=wb.SheetNames.find(n=>n.toLowerCase()==='notas')||wb.SheetNames[0];
     const ws=wb.Sheets[sheetName];
     const rows=XLSX.utils.sheet_to_json(ws,{defval:null});
-    let n=0;
+    const clean=v=>(v===null||v===undefined||v==='')?null:Number(v);
+    const total=rows.length||1;
+    const batch=new Map();
+    let n=0,i=0;
     for(const r of rows){
+      i++;
       const alumno=r['Alumno']; const grado=parseGradoNum(r['Grado']); const curso=r['Curso']; const bim=Number(r['Bimestre']);
       if(!alumno||!grado||!curso||!bim)continue;
       const s=await findOrCreateStudentRemote(alumno,grado);
-      const clean=v=>(v===null||v===undefined||v==='')?null:Number(v);
+      if(!s)continue;
       DATA.records[s.id]=DATA.records[s.id]||{};
       DATA.records[s.id][curso]=DATA.records[s.id][curso]||{};
-      DATA.records[s.id][curso][bim]={
+      const rec={
         cN1:clean(r['Cuaderno N1']),cN2:clean(r['Cuaderno N2']),
         lN1:clean(r['Libro N1']),lN2:clean(r['Libro N2']),
         conN1:clean(r['Conducta N1']),conN2:clean(r['Conducta N2']),
         exM:clean(r['Examen Mensual']),exB:clean(r['Examen Bimestral'])
       };
-      await upsertGradeRow(s.id,curso,bim);
+      DATA.records[s.id][curso][bim]=rec;
+      batch.set(s.id+'|'+curso+'|'+bim,{
+        sid:s.id,curso,bim,c_n1:rec.cN1,c_n2:rec.cN2,l_n1:rec.lN1,l_n2:rec.lN2,
+        con_n1:rec.conN1,con_n2:rec.conN2,ex_m:rec.exM,ex_b:rec.exB
+      });
       n++;
+      if(i%5===0){setLoading(`Procesando alumnos: fila ${i} de ${rows.length}`,3+Math.round(i/total*47));await new Promise(r=>setTimeout(r,0));}
     }
+    const all=[...batch.values()];
+    const CH=200;
+    for(let k=0;k<all.length;k+=CH){
+      const chunk=all.slice(k,k+CH);
+      setLoading(`Guardando notas en la nube: ${Math.min(k+CH,all.length)} de ${all.length}`,50+Math.round(Math.min(k+CH,all.length)/all.length*50));
+      const {error}=await sb.from('grades').upsert(chunk,{onConflict:'sid,curso,bim'});
+      if(error)throw new Error(error.message);
+    }
+    setLoading('Listo',100);
+    hideLoading();
+    window._importFile=null;
     window._importMsg=`Importación completa: ${n} registros de notas actualizados en la nube.`;
     render();
   }catch(e){
-    window._importMsg='No se pudo leer ese archivo. Verifica que tenga una hoja "Notas" con las columnas Bimestre, Grado, Curso, Alumno y las notas.';
+    hideLoading();
+    window._importMsg='No se pudo actualizar la base de datos. Verifica que el archivo tenga una hoja "Notas" con las columnas Bimestre, Grado, Curso, Alumno y las notas.'+(e&&e.message?' ('+e.message+')':'');
     render();
   }
 }
@@ -540,7 +614,7 @@ function descargarReporteCompleto(bim){
     doc.setFont('helvetica','bold');doc.setFontSize(15);doc.setTextColor(...NAVY);doc.text(t,148.5,15,{align:'center'});
     doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(90,90,90);doc.text(s,148.5,21,{align:'center'});
   };
-  const base={theme:'grid',headStyles:{fillColor:NAVY,halign:'center',fontSize:8},styles:{fontSize:8.5,cellPadding:1.8,lineColor:[216,210,194],textColor:[32,35,43]},alternateRowStyles:{fillColor:[236,231,218]},margin:{left:14,right:14}};
+  const base={theme:'grid',headStyles:{fillColor:[236,231,218],textColor:[68,68,68],fontStyle:'bold',halign:'center',fontSize:8,lineColor:[216,210,194]},styles:{fontSize:8.5,cellPadding:1.8,lineColor:[216,210,194],textColor:[32,35,43],fillColor:[255,255,255]},margin:{left:14,right:14}};
   const gs=grados();
   let first=true;
 
