@@ -69,6 +69,16 @@ button.btn:disabled{opacity:.5;cursor:not-allowed}
 .login-card input{width:100%;margin-bottom:12px}
 .login-err{color:var(--red);font-size:.82rem;margin-top:8px;min-height:1em}
 .stk th:first-child,.stk td:first-child{position:sticky;left:0;background:#fff;z-index:1;box-shadow:1px 0 0 var(--line)}.stk th:first-child{background:var(--paper-2)}
+.c{position:relative;display:inline-block;vertical-align:top}
+.c input.nota-in{padding:6px 15px 6px 4px;touch-action:manipulation}
+.c .lki{position:absolute;right:4px;top:11px;width:11px;height:11px;display:none;color:#8a8a8a;pointer-events:none}
+.c.lk .lki{display:block}
+.c.lk input{background:var(--paper-2);color:#666;cursor:pointer}
+.c.md input{background:#fff4d6;border-color:#D9A441;color:#8a6212;font-weight:700}
+.c .pv{font-size:.68rem;color:#8a6212;height:14px;line-height:14px;white-space:nowrap}
+.chgbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+#chgCnt{padding:5px 12px;border-radius:6px;background:#eee;font:.85rem 'Segoe UI',Arial,sans-serif;color:#555}
+#chgCnt.on{background:#fff4d6;color:#8a6212;font-weight:600}
 .bar-track{position:relative}
 .bar-track .thr{position:absolute;left:65%;top:0;bottom:0;border-left:2px dashed #555;opacity:.6}
 .bar-row[data-gc]:hover,.bar-row[data-gg]:hover{background:#fbf3df}
@@ -303,10 +313,64 @@ function viewEstudiantes(){
 }
 
 function fieldInput(sid,curso,bim,field,val){
-  return `<input type="text" inputmode="decimal" autocomplete="off" class="nota-in" data-sid="${sid}" data-field="${field}" value="${val??''}">`;
+  return cellHtml(`data-sid="${sid}" data-field="${field}"`,val);
 }
 
 /* ---------- REGISTRO: vistas por alumno y pendientes ---------- */
+/* ---------- Protección de notas guardadas y resaltado de cambios ---------- */
+const LKI='<svg class="lki" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+function cellHtml(attrs,val){
+  const v=(val===null||val===undefined)?'':String(val),lk=v!=='';
+  return `<div class="c${lk?' lk':''}"><input type="text" inputmode="decimal" autocomplete="off" class="nota-in" ${attrs} data-o="${v}" value="${v}"${lk?' readonly':''}>${LKI}<div class="pv"></div></div>`;
+}
+const CHG='<div class="chgbar"><span id="chgCnt">Sin cambios</span><button class="btn ghost" id="undoChg">Descartar cambios</button><div style="flex-basis:100%;font-size:.78rem;color:#777;font-family:\'Segoe UI\',Arial">Las notas guardadas tienen candado: tócalas dos veces para editarlas. En amarillo ves lo que cambiaste y su valor anterior.</div></div>';
+const normN=v=>v===''||v===null||v===undefined?'':String(Number(v));
+function modCount(){return [...document.querySelectorAll('.nota-in[data-o]')].filter(i=>normN(i.value)!==normN(i.dataset.o)).length;}
+function updCount(){
+  const n=modCount(),c=document.getElementById('chgCnt');
+  if(c){c.textContent=n?(n+(n===1?' cambio sin guardar':' cambios sin guardar')):'Sin cambios';c.classList.toggle('on',n>0);}
+  ['saveGrades','saveAlumno'].forEach(id=>{const b=document.getElementById(id);if(b&&!b.disabled){if(!b.dataset.base)b.dataset.base=b.textContent;b.textContent=n?`${b.dataset.base} (${n})`:b.dataset.base;}});
+}
+function wireLock(m){
+  m.querySelectorAll('.nota-in[data-o]').forEach(inp=>{
+    const box=inp.parentElement,pv=box.querySelector('.pv');let t=0;
+    const upd=()=>{
+      const md=normN(inp.value)!==normN(inp.dataset.o);
+      box.classList.toggle('md',md);box.classList.toggle('lk',inp.readOnly);
+      pv.textContent=md?'antes: '+(inp.dataset.o===''?'vacío':inp.dataset.o):'';
+    };
+    const unlock=()=>{inp.readOnly=false;upd();inp.focus();inp.select();};
+    inp.addEventListener('click',()=>{if(!inp.readOnly)return;const n=Date.now();if(n-t<500)unlock();else t=n;});
+    inp.addEventListener('keydown',e=>{if(inp.readOnly&&(e.key==='F2'||e.key===' ')){e.preventDefault();unlock();}});
+    inp.addEventListener('input',()=>{upd();updCount();});
+    inp.addEventListener('blur',()=>{if(!inp.readOnly&&normN(inp.value)===normN(inp.dataset.o)&&inp.dataset.o!==''){inp.value=inp.dataset.o;inp.readOnly=true;}upd();});
+    upd();
+  });
+  const u=document.getElementById('undoChg');
+  if(u)u.onclick=()=>{
+    m.querySelectorAll('.nota-in[data-o]').forEach(i=>{
+      if(normN(i.value)!==normN(i.dataset.o)){i.value=i.dataset.o;i.dispatchEvent(new Event('input',{bubbles:true}));}
+      i.readOnly=i.dataset.o!=='';i.dispatchEvent(new Event('blur'));
+    });
+    window._dirtyA=false;updCount();
+  };
+  updCount();
+}
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t&&['rGrado','rCurso','rBim'].includes(t.id)&&modCount()>0&&!confirm('Tienes notas modificadas sin guardar. Si continúas, se perderán. ¿Continuar?')){
+    const o=[...t.options].find(x=>x.defaultSelected);if(o)t.value=o.value;
+    e.stopImmediatePropagation();e.stopPropagation();
+  }
+},true);
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('nav button,[data-rmode]');
+  if(b&&document.getElementById('saveGrades')&&modCount()>0&&!confirm('Tienes notas modificadas sin guardar. Si continúas, se perderán. ¿Continuar?')){
+    e.stopImmediatePropagation();e.preventDefault();
+  }
+},true);
+window.addEventListener('beforeunload',e=>{if(modCount()>0){e.preventDefault();e.returnValue='';}});
+
 function viewRegistro(){
   const md=window._rmode||'curso';
   const bar=`<div class="tabbar">${[['curso','Por curso'],['alumno','Por alumno'],['pend','Pendientes de entrega']].map(x=>`<button data-rmode="${x[0]}" class="${md===x[0]?'active':''}">${x[1]}</button>`).join('')}</div>`;
@@ -325,14 +389,14 @@ function viewRegAlumno(){
   const F=['cN1','cN2','lN1','lN2','conN1','conN2','exM','exB'];
   const rows=CURSOS.map((c,ci)=>{
     const r=getRec(s.id,c,bim)||{},prom=promAlumnoCurso(s.id,c,bim),p=pctLleno(r);
-    return `<tr><td><b>${esc(c)}</b></td>${F.map(k=>`<td><input type="text" inputmode="decimal" autocomplete="off" class="nota-in" data-sid="${s.id}" data-curso="${esc(c)}" data-ci="${ci}" data-field="${k}" value="${r[k]??''}"></td>`).join('')}<td class="${estadoClass(prom)}">${prom??'—'}</td><td id="pctc-${ci}" style="font-weight:600;color:${pctColor(p)}">${p}%</td></tr>`;
+    return `<tr><td><b>${esc(c)}</b></td>${F.map(k=>`<td>${cellHtml(`data-sid="${s.id}" data-curso="${esc(c)}" data-ci="${ci}" data-field="${k}"`,r[k])}</td>`).join('')}<td class="${estadoClass(prom)}">${prom??'—'}</td><td id="pctc-${ci}" style="font-weight:600;color:${pctColor(p)}">${p}%</td></tr>`;
   }).join('');
   const gen=promAlumnoGeneral(s.id,bim);
   return `<h2>Registro por alumno</h2><div class="sub">Elige un alumno y registra todas sus notas del bimestre. Al cambiar de alumno, las notas escritas se guardan solas.</div>${sel}
   <div class="row"><div style="flex:2 1 220px"><label>Alumno</label><select id="raAlumno">${list.map(x=>`<option value="${x.id}" ${x.id===s.id?'selected':''}>${esc(x.nombre)}</option>`).join('')}</select></div></div>
   <div style="display:flex;gap:10px;margin:4px 0 12px"><button class="btn ghost" style="flex:1" data-rnav="-1" ${idx===0?'disabled':''}>◀ Anterior</button><button class="btn ghost" style="flex:1" data-rnav="1" ${idx===list.length-1?'disabled':''}>Siguiente ▶</button></div>
   <div class="card"><b style="font-family:Georgia,serif;font-size:1.05rem">${esc(s.nombre)}</b> <span class="sub">· ${g}° · alumno ${idx+1} de ${list.length} · promedio general: <b>${gen??'—'}</b></span></div>
-  <div style="overflow-x:auto"><table class="stk"><thead><tr><th>Curso</th><th>Cuad. N1</th><th>Cuad. N2</th><th>Libro N1</th><th>Libro N2</th><th>Cond. N1</th><th>Cond. N2</th><th>Ex.Mensual</th><th>Ex.Bimestral</th><th>Promedio</th><th>% llenado</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${CHG}<div style="overflow-x:auto"><table class="stk"><thead><tr><th>Curso</th><th>Cuad. N1</th><th>Cuad. N2</th><th>Libro N1</th><th>Libro N2</th><th>Cond. N1</th><th>Cond. N2</th><th>Ex.Mensual</th><th>Ex.Bimestral</th><th>Promedio</th><th>% llenado</th></tr></thead><tbody>${rows}</tbody></table></div>
   <div style="margin-top:14px"><button class="btn" id="saveAlumno">Guardar notas de ${esc(s.nombre.split(' ').slice(-1)[0])}</button></div>`;
 }
 const BASEC={'Razonamiento Matemático':'Razonamiento Mat.'};
@@ -395,6 +459,7 @@ async function guardarAlumno(){
 async function rnav(fn){if(window._dirtyA)await guardarAlumno();fn();render();}
 function wireReg(){
   const m=document.getElementById('main');if(!m)return;
+  wireLock(m);
   const sel=(id,fn)=>{const e=document.getElementById(id);if(e)e.onchange=()=>rnav(()=>fn(e.value));};
   const first=g=>{const l=studentsOf(g);return l.length?l[0].id:null;};
   m.querySelectorAll('[data-rmode]').forEach(b=>b.onclick=()=>rnav(()=>{window._rmode=b.dataset.rmode;}));
@@ -437,7 +502,7 @@ function viewRegCurso(){
     <div><label>Curso</label><select id="rCurso">${CURSOS.map(c=>`<option ${c==curso?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
     <div><label>Bimestre</label><select id="rBim">${BIMS.map(b=>`<option value="${b}" ${b==bim?'selected':''}>${BIM_LABEL[b]}</option>`).join('')}</select></div>
   </div>
-  ${list.length?`<div style="overflow-x:auto"><table><thead><tr><th>Alumno</th><th>Cuad. N1</th><th>Cuad. N2</th><th>Libro N1</th><th>Libro N2</th><th>Cond. N1</th><th>Cond. N2</th><th>Ex.Mensual</th><th>Ex.Bimestral</th><th>Promedio</th><th>% llenado</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${list.length?`${CHG}<div style="overflow-x:auto"><table><thead><tr><th>Alumno</th><th>Cuad. N1</th><th>Cuad. N2</th><th>Libro N1</th><th>Libro N2</th><th>Cond. N1</th><th>Cond. N2</th><th>Ex.Mensual</th><th>Ex.Bimestral</th><th>Promedio</th><th>% llenado</th></tr></thead><tbody>${rows}</tbody></table></div>
   <div class="sub" id="resumenLleno" style="margin:10px 0 0">${completos} de ${list.length} alumnos con todas sus notas completas.</div>
   <div style="margin-top:14px"><button class="btn" id="saveGrades">Guardar notas</button></div>`
   :'<div class="empty">No hay alumnos en ese grado.</div>'}`;
