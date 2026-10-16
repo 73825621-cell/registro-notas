@@ -212,6 +212,26 @@ tr:hover td{background:#f7f8ff}
 input[type=file]{padding:6px 14px 6px 6px;border-radius:99px;background:#fff;color:var(--mu);font-size:.85rem;cursor:pointer;max-width:100%}
 input[type=file]::file-selector-button{background:#eef0ff;color:var(--ind);border:1px solid rgba(91,91,240,.35);border-radius:99px;padding:7px 18px;margin-right:12px;font:inherit;font-size:.85rem;cursor:pointer;transition:background .15s}
 input[type=file]::file-selector-button:hover{background:#e0e2ff}
+
+/* menú móvil desplegable, pestañas en cuadrícula y confirmación de salida */
+.menu-toggle{display:none}.nav-links{display:contents}
+.lo-btns{display:flex;gap:10px;margin-top:20px}.lo-btns .btn{flex:1}
+button.btn.warn{background:#d6455a}button.btn.warn:hover{background:#c23b50}
+@media(max-width:760px){
+ nav{flex-wrap:wrap;overflow:visible;position:relative;padding:12px 12px 0;gap:0;align-items:center;justify-content:space-between}
+ nav .brand{flex:0 0 auto;margin:0}
+ .menu-toggle{display:inline-flex;align-items:center;gap:8px;background:#fff!important;color:var(--tx)!important;border-radius:99px;padding:9px 14px!important;font-size:.88rem;max-width:62%}
+ .menu-toggle span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .menu-toggle svg{flex:none;width:18px;height:18px}
+ .nav-links{display:none;flex-direction:column;width:100%;background:#fff;border-radius:16px;padding:8px;margin-top:10px;box-shadow:0 12px 32px rgba(20,60,110,.25)}
+ nav.open .nav-links{display:flex}
+ .nav-links button{display:block;width:100%;text-align:left;padding:14px 16px;border-radius:12px;color:var(--tx);font-size:1rem;background:none}
+ .nav-links button:hover{background:#f1f1f6}
+ .nav-links button.active{background:#eef0ff;color:var(--ind);font-weight:500}
+ .nav-links .signout{margin:6px 0 0!important;border-top:1px solid var(--hl);border-radius:0 0 12px 12px;color:#d6455a;padding:14px 16px!important}
+ .tabbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;overflow:visible;margin-right:0;padding-right:0}
+ .tabbar button{white-space:normal;text-align:center;line-height:1.2;padding:10px 6px;font-size:.8rem;border-radius:14px}
+}
 </style>
 </head>
 <body>
@@ -342,21 +362,39 @@ function renderLogin(err,mode,info){
 
 /* ---------- Layout / tabs ---------- */
 let tab='estudiantes';
+function confirmLogout(){
+  if(document.getElementById('logoutOv'))return;
+  const n=typeof modCount==='function'?modCount():0;
+  const o=document.createElement('div');o.id='logoutOv';o.className='overlay';
+  o.innerHTML=`<div class="box" role="dialog" aria-modal="true" style="max-width:360px;width:88vw"><h3 style="margin:0 0 8px;font-size:1.2rem">¿Cerrar sesión?</h3><div style="color:#667085;font-size:.92rem;line-height:1.5">Vas a salir de la aplicación.${n?` Tienes <b>${n}</b> ${n===1?'nota modificada':'notas modificadas'} sin guardar que se perderán.`:''}</div><div class="lo-btns"><button class="btn ghost" id="loNo">Cancelar</button><button class="btn warn" id="loYes">Sí, salir</button></div></div>`;
+  document.body.appendChild(o);
+  const onKey=e=>{if(e.key==='Escape')close();};
+  const close=()=>{o.remove();document.removeEventListener('keydown',onKey);};
+  document.addEventListener('keydown',onKey);
+  o.onclick=e=>{if(e.target===o)close();};
+  document.getElementById('loNo').onclick=close;
+  document.getElementById('loYes').onclick=async()=>{close();await sb.auth.signOut();session=null;renderLogin();};
+  document.getElementById('loNo').focus();
+}
 function renderShell(){
   document.getElementById('root').innerHTML=`
   <div class="app">
   <nav>
     <div class="brand">Los Ángeles<small>Registro de Notas</small></div>
-    <button data-tab="estudiantes">Estudiantes</button>
-    <button data-tab="registro">Registro de notas</button>
-    <button data-tab="analisis">Análisis</button>
-    <button data-tab="reportes">Reportes</button>
-    <button class="signout no-print" id="signOutBtn">Cerrar sesión</button>
+    <button class="menu-toggle no-print" id="menuBtn" aria-label="Abrir menú"><span>${({estudiantes:'Estudiantes',registro:'Registro de notas',analisis:'Análisis',reportes:'Reportes'})[tab]||'Menú'}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <div class="nav-links">
+      <button data-tab="estudiantes">Estudiantes</button>
+      <button data-tab="registro">Registro de notas</button>
+      <button data-tab="analisis">Análisis</button>
+      <button data-tab="reportes">Reportes</button>
+      <button class="signout no-print" id="signOutBtn">Cerrar sesión</button>
+    </div>
   </nav>
   <main id="main"></main>
   </div>`;
   document.querySelectorAll('nav button[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
-  document.getElementById('signOutBtn').onclick=async()=>{await sb.auth.signOut();session=null;renderLogin();};
+  document.getElementById('signOutBtn').onclick=confirmLogout;
+  document.getElementById('menuBtn').onclick=()=>document.querySelector('nav').classList.toggle('open');
 }
 
 function render(){
@@ -446,7 +484,7 @@ document.addEventListener('change',e=>{
 },true);
 document.addEventListener('click',e=>{
   const b=e.target.closest&&e.target.closest('nav button,[data-rmode]');
-  if(b&&document.getElementById('saveGrades')&&modCount()>0&&!confirm('Tienes notas modificadas sin guardar. Si continúas, se perderán. ¿Continuar?')){
+  if(b&&b.id!=='signOutBtn'&&b.id!=='menuBtn'&&document.getElementById('saveGrades')&&modCount()>0&&!confirm('Tienes notas modificadas sin guardar. Si continúas, se perderán. ¿Continuar?')){
     e.stopImmediatePropagation();e.preventDefault();
   }
 },true);
